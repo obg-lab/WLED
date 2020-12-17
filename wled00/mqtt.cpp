@@ -7,6 +7,44 @@
 #ifdef WLED_ENABLE_MQTT
 #define MQTT_KEEP_ALIVE_TIME 60    // contact the MQTT broker every 60 seconds
 
+PubSubClient client(net);
+
+void messageReceivedPubSub(char *topic, byte *payload, unsigned int length)
+{
+  Serial.print("Received [");
+  Serial.print(topic);
+  Serial.print("]: ");
+  for (int i = 0; i < length; i++)
+  {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
+}
+
+void pubSubErr(int8_t MQTTErr)
+{
+  if (MQTTErr == MQTT_CONNECTION_TIMEOUT)
+    Serial.print("Connection tiemout");
+  else if (MQTTErr == MQTT_CONNECTION_LOST)
+    Serial.print("Connection lost");
+  else if (MQTTErr == MQTT_CONNECT_FAILED)
+    Serial.print("Connect failed");
+  else if (MQTTErr == MQTT_DISCONNECTED)
+    Serial.print("Disconnected");
+  else if (MQTTErr == MQTT_CONNECTED)
+    Serial.print("Connected");
+  else if (MQTTErr == MQTT_CONNECT_BAD_PROTOCOL)
+    Serial.print("Connect bad protocol");
+  else if (MQTTErr == MQTT_CONNECT_BAD_CLIENT_ID)
+    Serial.print("Connect bad Client-ID");
+  else if (MQTTErr == MQTT_CONNECT_UNAVAILABLE)
+    Serial.print("Connect unavailable");
+  else if (MQTTErr == MQTT_CONNECT_BAD_CREDENTIALS)
+    Serial.print("Connect bad credentials");
+  else if (MQTTErr == MQTT_CONNECT_UNAUTHORIZED)
+    Serial.print("Connect unauthorized");
+}
+
 void parseMQTTBriPayload(char* payload)
 {
   if      (strstr(payload, "ON") || strstr(payload, "on") || strstr(payload, "true")) {bri = briLast; colorUpdated(1);}
@@ -134,35 +172,39 @@ void publishMqtt()
 
 //HA autodiscovery was removed in favor of the native integration in HA v0.102.0
 
-bool initMqtt()
+bool initMqtt(bool nonBlocking = false)
 {
-  lastMqttReconnectAttempt = millis();
-  if (!mqttEnabled || mqttServer[0] == 0 || !WLED_CONNECTED) return false;
-
-  if (mqtt == nullptr) {
-    mqtt = new AsyncMqttClient();
-    mqtt->onMessage(onMqttMessage);
-    mqtt->onConnect(onMqttConnect);
-  }
-  if (mqtt->connected()) return true;
-
-  DEBUG_PRINTLN(F("Reconnecting MQTT"));
-  IPAddress mqttIP;
-  if (mqttIP.fromString(mqttServer)) //see if server is IP or domain
+  Serial.print("MQTT conectando");
+  while (!client.connected())
   {
-    mqtt->setServer(mqttIP, mqttPort);
-  } else {
-    mqtt->setServer(mqttServer, mqttPort);
-  }
-  mqtt->setClientId(mqttClientID);
-  if (mqttUser[0] && mqttPass[0]) mqtt->setCredentials(mqttUser, mqttPass);
+    Serial.print(".");
+    delay(1000);
 
-  strcpy(mqttStatusTopic, mqttDeviceTopic);
-  strcat(mqttStatusTopic, "/status");
-  mqtt->setWill(mqttStatusTopic, 0, true, "offline");
-  mqtt->setKeepAlive(MQTT_KEEP_ALIVE_TIME);
-  mqtt->connect();
-  return true;
+    if (client.connect(THINGNAME, MQTT_USER, NULL))
+    {
+      Serial.println("conectado!");
+      if (!client.subscribe(MQTT_SUB_TOPIC))
+        pubSubErr(client.state());
+    }
+    else
+    {
+      Serial.print("SSL Error Code: ");
+      Serial.println(net.getLastSSLError());
+      Serial.print("failed, reason -> ");
+      pubSubErr(client.state());
+      if (!nonBlocking)
+      {
+        Serial.println(" < tentando novamente em 5 segundos");
+        delay(5000);
+      }
+      else
+      {
+        Serial.println(" <");
+      }
+    }
+    if (nonBlocking)
+      break;
+  }
 }
 
 #else

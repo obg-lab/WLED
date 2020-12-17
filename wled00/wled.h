@@ -46,17 +46,20 @@
 // filesystem specific debugging
 //#define WLED_DEBUG_FS
 
-// Library inclusions. 
+// Library inclusions.
 #include <Arduino.h>
 #ifdef ESP8266
   #include <ESP8266WiFi.h>
   #include <ESP8266mDNS.h>
   #include <ESPAsyncTCP.h>
+  #include <PubSubClient.h>
   #include <LittleFS.h>
   extern "C"
   {
   #include <user_interface.h>
   }
+
+  #include <secrets.h>
 #else // ESP32
   #include <WiFi.h>
   #include <ETH.h>
@@ -66,6 +69,15 @@
   //#include "SPIFFS.h"
   #define CONFIG_LITTLEFS_FOR_IDF_3_2
   #include <LITTLEFS.h>
+#endif
+
+#ifdef NETDECLARED
+#else
+  #define NETDECLARED
+  BearSSL::WiFiClientSecure net;
+  BearSSL::X509List cert(cacert);
+  BearSSL::X509List client_crt(client_cert);
+  BearSSL::PrivateKey key(privkey);
 #endif
 
 #include "src/dependencies/network/Network.h"
@@ -183,7 +195,7 @@ WLED_GLOBAL char otaPass[33] _INIT(DEFAULT_OTA_PASS);
 // Hardware CONFIG (only changeble HERE, not at runtime)
 // LED strip pin, button pin and IR pin changeable in NpbWrapper.h!
 
-//WLED_GLOBAL byte presetToApply _INIT(0); 
+// WLED_GLOBAL byte presetToApply _INIT(0);
 
 #if AUXPIN >= 0
 WLED_GLOBAL byte auxDefaultState _INIT(0);                         // 0: input 1: high 2: low
@@ -602,6 +614,7 @@ public:
   void beginStrip();
   void handleConnection();
   void initAP(bool resetAP = false);
+  void setupSSL();
   void initConnection();
   void initInterfaces();
   void handleStatusLED();
